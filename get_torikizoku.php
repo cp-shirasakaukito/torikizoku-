@@ -7,7 +7,7 @@
  */
 
 require_once("simple_html_dom.php");
-mb_language("Japanese");
+//mb_language("Japanese");
 
 //表示文言のテンプレート設定
 $no_info = "混雑状況が提供されていません";
@@ -15,15 +15,21 @@ $no_wait = "チャンスです！待ち時間なし！";
 $wait = "待ってる人達：";
 $error_msg = "エラー";
 
-//slackで発行されたURL
-$incoming_url = "https://hooks.slack.com/services/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";
+$epark_url = "http://epark.jp/list?freeword=";
+$gmap_url = "https://maps.googleapis.com/maps/api/staticmap?size=500x400&";
 
 //eparkから鳥貴族のHTMLを取得
-$test_epark_url = "http://epark.jp/list/tokyo/category_1";
-$real_epark_url = "http://epark.jp/list?freeword=%E9%B3%A5%E8%B2%B4%E6%97%8F%E3%80%80%E6%B8%8B%E8%B0%B7";
-$epark_url = $test_epark_url;
+//検索する地域を抽出
+if($_POST["text"] === "tori"){
+    $area = "渋谷";
+} else {
+    $area = substr($_POST["text"],5);
+}
+$freeword = urlencode("鳥貴族 ".$area);
+$epark_url .=$freeword;
 
-
+//slackで発行されたURL
+//$incoming_url = "https://hooks.slack.com/services/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";
 $html_source = file_get_contents($epark_url);
 $html_object = str_get_html($html_source);
 
@@ -101,30 +107,41 @@ for($i=0; $i < $count_store;$i++){
  * */
 
 $payload = array(
-    "text" => "渋谷鳥貴族混雑状況",
+    "text" =>"鳥貴族の混雑状況",
     "attachments" => array()
 );
 foreach($store_info as $key => $value){
     switch ($value["status"]){
         case "-1":
-            $color = "danger";
+            $color = "warning";
+            $marker_color = "orange";
             break;
         case "0":
             $color = "#bdbdbd";
+            $marker_color = "gray";
             break;
         case "1":
             $color = "good";
+            $marker_color = "green";
             break;
         case "2":
-            $color = "warning";
+            $color = "danger";
+            $marker_color = "red";
             break;
         default:
             $color = "danger";
+            $marker_color = "red";
             break;
     }
+    $label = chr(65+$key);
+    $marker_info = "markers=color:".$marker_color."|label:".$label."|".urlencode($value["address"]);
+    $gmap_url .= $marker_info;
+    if($value !== end($store_info)){
+        $gmap_url .= "&";
+    }
     $payload["attachments"][$key] = array(
-        "fallback" => $value["name"],
-        "pretext" => $value["name"],
+        "fallback" => $label.$value["name"],
+        "pretext" => $label.$value["name"],
         "text" => $value["address"],
         "color" => $color,
         "fields" => array(
@@ -135,18 +152,34 @@ foreach($store_info as $key => $value){
         )
     );
 }
+
+$urlshortener = "https://www.googleapis.com/urlshortener/v1/url?key=";
+$key = "AIzaSyAjgDegr9NlRZ1o-Ldhr2V3xBHQK8MZFBU";
+
+//slackに投稿をPOST
+$longurl["longUrl"] = $gmap_url;
+$longurl = json_encode($longurl);
+
+$ch = curl_init();
+curl_setopt($ch, CURLOPT_URL,$urlshortener.$key);
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+curl_setopt($ch, CURLOPT_POST,true);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_POSTFIELDS, $longurl);
+curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+        'Content-Type: application/json',
+        'Content-Length: ' . strlen($longurl))
+);
+$response = curl_exec($ch) or die("error" . curl_error($ch));
+$result = json_decode($response, true);
+
+//$payload["text"] = $gmap_url;
+$payload["text"] = $result["id"];
 $payload = json_encode($payload);
 echo $payload;
 
 
 
-//slackに投稿をPOST
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_URL,$incoming_url);
-curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-curl_setopt($ch, CURLOPT_POST,true);
-curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-$output = curl_exec($ch) or die("error" . curl_error($ch));
 
 
 
