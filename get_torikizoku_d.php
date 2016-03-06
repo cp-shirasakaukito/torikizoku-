@@ -1,4 +1,10 @@
 <?php
+/*
+ * 2016/03/06
+ * エンジニア交流会用のバージョンダウン版
+ * */
+
+
 /**
  * Created by PhpStorm.
  * User: ukito
@@ -28,7 +34,8 @@ if($_POST["text"] === "tori"){
 $freeword = urlencode("鳥貴族 ".$area);
 $epark_url .=$freeword;
 
-
+//slackで発行されたURL
+//$incoming_url = "https://hooks.slack.com/services/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";
 $html_source = file_get_contents($epark_url);
 $html_object = str_get_html($html_source);
 
@@ -141,7 +148,7 @@ foreach($store_info as $key => $value){
     $payload["attachments"][$key] = array(
         "fallback" => $label.$value["name"],
         "pretext" => $label.$value["name"],
-        "text" => $value["address"],
+//        "text" => $value["address"],
         "color" => $color,
         "fields" => array(
             array(
@@ -152,47 +159,34 @@ foreach($store_info as $key => $value){
     );
 }
 
-$short_url = shorten_url($gmap_url);
+$urlshortener = "https://www.googleapis.com/urlshortener/v1/url?key=";
+$key = "AIzaSyAjgDegr9NlRZ1o-Ldhr2V3xBHQK8MZFBU";
 
+//slackに投稿をPOST
+$longurl["longUrl"] = $gmap_url;
+$longurl = json_encode($longurl);
+
+$ch = curl_init();
+curl_setopt($ch, CURLOPT_URL,$urlshortener.$key);
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+curl_setopt($ch, CURLOPT_POST,true);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_POSTFIELDS, $longurl);
+curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+        'Content-Type: application/json',
+        'Content-Length: ' . strlen($longurl))
+);
+$response = curl_exec($ch) or die("error" . curl_error($ch));
+$result = json_decode($response, true);
+if(!$result) {
+    echo "通信エラー";
+}
 //$payload["text"] = $gmap_url;
-$payload["text"] = $short_url["id"];
+$payload["text"] = $result["id"];
 $payload = json_encode($payload);
 echo $payload;
 
 
-/*
- * mapのURLが長いので短縮する
- * googleのapishortenerを利用してメールアドレスを短縮する
- * レスポンス内容例
- * {
- *      "kind": "urlshortener#url",
- *      "id": "http://goo.gl/fbsS",
- *      "longUrl": "http://www.google.com/"
- * }
- * */
-function shorten_url($url) {
-
-    $urlshortener = "https://www.googleapis.com/urlshortener/v1/url?key=";
-    $key = "AIzaSyAjgDegr9NlRZ1o-Ldhr2V3xBHQK8MZFBU";
-
-    $longurl["longUrl"] = $url;
-    $longurl = json_encode($longurl);
-
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL,$urlshortener.$key);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-    curl_setopt($ch, CURLOPT_POST,true);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $longurl);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-            'Content-Type: application/json',
-            'Content-Length: ' . strlen($longurl))
-    );
-    $response = curl_exec($ch) or die("error" . curl_error($ch));
-    $result = json_decode($response, true);
-
-    return $result;
-}
 
 
 
